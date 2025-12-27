@@ -429,17 +429,41 @@ class TikTokScraper:
                         
                         print(f"    Comment {idx+1} text preview: {full_text[:80]}...")
                         
-                        # Extract username - SIMPLEST METHOD:  just get first link's href
+                        # Extract username using JavaScript
                         username = None
-                        all_links = elem.find_elements(By.TAG_NAME, 'a')
+                        js_methods = [
+                            # Method 1: Find link with /@ in href
+                            """
+                            var links = arguments[0].querySelectorAll('a[href*="/@"]');
+                            if (links.length > 0) {
+                                var href = links[0].href;
+                                var match = href.match(/\\/@([^\\?^\\/]+)/);
+                                return match ? match[1] : null;
+                            }
+                            return null;
+                            """,
+                            # Method 2: Iterate all links
+                            """
+                            var links = arguments[0].getElementsByTagName('a');
+                            for (var i = 0; i < links.length; i++) {
+                                var href = links[i].href;
+                                if (href && href.includes('/@')) {
+                                    var parts = href.split('/@');
+                                    if (parts.length > 1) {
+                                        return parts[1].split('?')[0].split('/')[0];
+                                    }
+                                }
+                            }
+                            return null;
+                            """
+                        ]
                         
-                        for link in all_links:
+                        for method_idx, js_code in enumerate(js_methods):
                             try:
-                                href = link.get_attribute('href')
-                                print(f"      Found link href: {href}")
-                                if href and '/@' in href:
-                                    username = href.split('/@')[-1]. split('?')[0].split('/')[0]
-                                    print(f"      ✅ Extracted username: @{username}")
+                                result = self.driver.execute_script(js_code, elem)
+                                if result and len(result) > 0:
+                                    username = result
+                                    print(f"      ✅ Extracted username (method {method_idx+1}): @{username}")
                                     break
                             except:
                                 continue
@@ -448,19 +472,24 @@ class TikTokScraper:
                             print(f"      ❌ No username found, skipping")
                             continue
                         
-                        # Extract likes
-                        likes = 0
-                        all_spans = elem.find_elements(By.TAG_NAME, 'span')
-                        for span in all_spans:
-                            try: 
-                                span_text = span.text
-                                if span_text and (span_text.isdigit() or 'K' in span_text or 'M' in span_text):
-                                    likes = self.parse_like_count(span_text)
-                                    if likes > 0:
-                                        print(f"      ✅ Found likes: {likes}")
-                                        break
-                            except:
-                                continue
+                        # Extract likes using JavaScript
+                        js_likes = """
+                        var spans = arguments[0].getElementsByTagName('span');
+                        for (var i = 0; i < spans.length; i++) {
+                            var text = spans[i].textContent;
+                            if (text && (text.match(/^\\d+$/) || text.includes('K') || text.includes('M'))) {
+                                return text;
+                            }
+                        }
+                        return '0';
+                        """
+                        try:
+                            likes_text = self.driver.execute_script(js_likes, elem)
+                            likes = self.parse_like_count(likes_text)
+                            if likes > 0:
+                                print(f"      ✅ Likes: {likes}")
+                        except:
+                            likes = 0
                         
                         # Check for book keyword
                         is_book_comment = BOOK_KEYWORD in full_text
