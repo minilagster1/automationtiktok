@@ -437,7 +437,7 @@ class TikTokScraper:
                             var links = arguments[0].querySelectorAll('a[href*="/@"]');
                             if (links.length > 0) {
                                 var href = links[0].href;
-                                var match = href.match(/\\/@([^\\?^\\/]+)/);
+                                var match = href.match(/\\/@([^\\?\/]+)/);
                                 return match ? match[1] : null;
                             }
                             return null;
