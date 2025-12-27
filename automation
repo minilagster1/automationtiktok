@@ -1,0 +1,783 @@
+"""
+TIKTOK AUTOMATION BOT - ACTUALLY WORKING NOW
+=============================================
+
+✅ FIXED:  Scrolls COMMENTS container (not window)
+✅ FIXED: Username extraction that actually works
+✅ FIXED: Debug output to see what's happening
+
+"""
+
+import asyncio
+import discord
+import re
+import random
+import time
+import zipfile
+import os
+import pyotp
+from datetime import datetime, timedelta
+from selenium. webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.keys import Keys
+from selenium. common.exceptions import TimeoutException, NoSuchElementException
+import undetected_chromedriver as uc
+
+# ============================================================================
+# ⚙️ CONFIGURATION
+# ============================================================================
+
+DISCORD_BOT_TOKEN = "MTQ1MzYwNDc5OTA4MDY5MzkyMA.GZfAKd.ZJx0IuE-Lj09z_zXnwUh5mG4Ng9plGeRyeb7iI"
+DISCORD_CHANNEL_ID = 1453899411762577519
+
+BOOK_KEYWORD = "Hidden Rulers Exposed"
+
+TIKTOK_ACCOUNTS = [
+    {
+        "username": "thmaxumbandar0",
+        "password": "oqyyadp92%",
+        "email": "jordabrychjn@hotmail.com",
+        "email_password": "JRurjx4C",
+        "twofa_secret": "W3G2ERFDTX6T4CIU7AW5JSJWXLXPTRLK",
+        "proxy": "142.111.48.253:7030: iilpcluo: 8t8kt3yq82h7",
+        "profile_dir": "chrome_profile_account1",
+        "status":  "active",
+        "replies_today": 0,
+        "last_used": None
+    },
+    {
+        "username": "ocniilolotempio",
+        "password": "opgcn02$",
+        "email": "kavirduret9b@hotmail.com",
+        "email_password": "MzaYAX0p",
+        "twofa_secret": "NJO4EAWMHEYVVD4VWSZWT2KJANEMBHYK",
+        "proxy": "31.59.20.176:6754:iilpcluo:8t8kt3yq82h7",
+        "profile_dir": "chrome_profile_account2",
+        "status": "active",
+        "replies_today":  0,
+        "last_used": None
+    },
+    {
+        "username": "hzmiorisachary6",
+        "password": "hqjnd45#",
+        "email": "hiattvolinby@hotmail.com",
+        "email_password": "BQuVpPRy",
+        "twofa_secret": "DK3OCXUKXHCG4BNOHZT44PUZ4ZVL3GEP",
+        "proxy": "23.95.150.145:6114:iilpcluo:8t8kt3yq82h7",
+        "profile_dir": "chrome_profile_account3",
+        "status": "active",
+        "replies_today":  0,
+        "last_used": None
+    },
+    {
+        "username": "pdqaashiyanazyaan",
+        "password": "lwmkr096%",
+        "email": "kirovnooksv6@hotmail.com",
+        "email_password": "BMMNKA3B",
+        "twofa_secret": "AZXJHRCLZFT6ZT6LD4WBV3WFN6EIIFLN",
+        "proxy": "198.23.239.134:6540:iilpcluo:8t8kt3yq82h7",
+        "profile_dir": "chrome_profile_account4",
+        "status": "active",
+        "replies_today":  0,
+        "last_used": None
+    },
+    {
+        "username": "ihulatefasequoya",
+        "password": "akfok466#",
+        "email": "reinojudasz4@hotmail.com",
+        "email_password": "UVmnEplI",
+        "twofa_secret": "T6IEYO7B2A6PFE6O56DBUA65YKG5IDFP",
+        "proxy": "107.172.163.27:6543:iilpcluo:8t8kt3yq82h7",
+        "profile_dir": "chrome_profile_account5",
+        "status": "active",
+        "replies_today":  0,
+        "last_used": None
+    },
+]
+
+WAIT_TIME_BEFORE_PROCESSING = 5
+MAX_COMMENTS_TO_SCROLL = 200
+SCROLL_DELAY_MIN = 1
+SCROLL_DELAY_MAX = 3
+MAX_REPLIES_PER_ACCOUNT_PER_DAY = 30
+ACCOUNT_COOLDOWN_HOURS = 8
+MAX_LIKES_FOR_TESTING = 200
+
+REPLY_TEMPLATES = [
+    "Yeah, Hidden Rulers Exposed was honestly an excellent read, I recommend it to anyone who likes questioning narratives",
+    "Agreed, such an excellent book, Hidden Rulers Exposed really makes you think differently",
+    "100%, Hidden Rulers Exposed was excellent and definitely worth the time",
+    "Same here, I thought the book was excellent and really eye opening",
+    "Couldn't agree more, Hidden Rulers Exposed is an excellent book",
+    "Yep, excellent book, one of those that stays with you after finishing",
+    "Hidden Rulers Exposed was excellent, I'd recommend it to anyone curious about power and media",
+    "Totally agree, excellent book and very well written",
+    "Facts, Hidden Rulers Exposed is an excellent read, no doubt",
+    "Yes, excellent book, glad more people are talking about it"
+]
+
+# ============================================================================
+# 🤖 BOT CODE
+# ============================================================================
+
+def create_proxy_auth_extension(proxy_host, proxy_port, proxy_user, proxy_pass):
+    manifest_json = """
+    {
+        "version":  "1.0.0",
+        "manifest_version": 2,
+        "name": "Chrome Proxy",
+        "permissions":  [
+            "proxy",
+            "tabs",
+            "unlimitedStorage",
+            "storage",
+            "<all_urls>",
+            "webRequest",
+            "webRequestBlocking"
+        ],
+        "background": {
+            "scripts": ["background.js"]
+        },
+        "minimum_chrome_version":"22.0.0"
+    }
+    """
+
+    background_js = """
+    var config = {
+            mode: "fixed_servers",
+            rules:  {
+              singleProxy: {
+                scheme:  "http",
+                host: "%s",
+                port: parseInt(%s)
+              },
+              bypassList: ["localhost"]
+            }
+          };
+
+    chrome.proxy.settings.set({value: config, scope: "regular"}, function() {});
+
+    function callbackFn(details) {
+        return {
+            authCredentials: {
+                username: "%s",
+                password:  "%s"
+            }
+        };
+    }
+
+    chrome. webRequest.onAuthRequired.addListener(
+                callbackFn,
+                {urls: ["<all_urls>"]},
+                ['blocking']
+    );
+    """ % (proxy_host, proxy_port, proxy_user, proxy_pass)
+
+    plugin_file = 'proxy_auth_plugin.zip'
+    with zipfile.ZipFile(plugin_file, 'w') as zp:
+        zp.writestr("manifest.json", manifest_json)
+        zp.writestr("background.js", background_js)
+    return plugin_file
+
+def generate_2fa_code(secret):
+    try:
+        totp = pyotp.TOTP(secret)
+        return totp.now()
+    except Exception as e: 
+        print(f"❌ Error generating 2FA:  {e}")
+        return None
+
+class AccountManager:
+    def __init__(self, accounts):
+        self.accounts = accounts
+        self.current_index = 0
+        
+    def get_available_account(self):
+        attempts = 0
+        while attempts < len(self.accounts):
+            account = self.accounts[self.current_index]
+            if account['status'] == 'active': 
+                if account['replies_today'] < MAX_REPLIES_PER_ACCOUNT_PER_DAY: 
+                    if account['last_used'] is None or \
+                       (datetime.now() - account['last_used']).total_seconds() > ACCOUNT_COOLDOWN_HOURS * 3600:
+                        print(f"🔄 Using account #{self.current_index + 1}:  {account['username']}")
+                        return account
+            self.current_index = (self.current_index + 1) % len(self.accounts)
+            attempts += 1
+        print("❌ No available accounts!")
+        return None
+    
+    def mark_account_used(self, account):
+        account['last_used'] = datetime.now()
+        account['replies_today'] += 1
+        self.current_index = (self. current_index + 1) % len(self.accounts)
+        print(f"✅ Account used.  Next: #{self.current_index + 1}")
+    
+    def mark_account_banned(self, account):
+        account['status'] = 'banned'
+        print(f"⚠️ Account {account['username']} BANNED")
+
+class TikTokScraper:
+    def __init__(self, account_manager):
+        self.account_manager = account_manager
+        self.driver = None
+    
+    def start_browser(self, account):
+        print(f"🔐 Starting browser for {account['username']}...")
+        options = uc.ChromeOptions()
+        
+        profile_dir = os.path.join(os.getcwd(), account['profile_dir'])
+        if not os.path. exists(profile_dir):
+            os.makedirs(profile_dir)
+        print(f"💾 Profile:  {profile_dir}")
+        options.add_argument(f'--user-data-dir={profile_dir}')
+        
+        if account. get('proxy') and account['proxy']. strip():
+            proxy_parts = account['proxy'].split(':')
+            if len(proxy_parts) == 4:
+                proxy_host, proxy_port, proxy_user, proxy_pass = proxy_parts
+                print(f"🌐 Proxy: {proxy_host}:{proxy_port}")
+                proxy_extension = create_proxy_auth_extension(proxy_host, proxy_port, proxy_user, proxy_pass)
+                options.add_extension(proxy_extension)
+        
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--start-maximized')
+        
+        self.driver = uc. Chrome(options=options)
+        print(f"✅ Browser started!")
+        return True
+    
+    def check_if_logged_in(self):
+        try:
+            self.driver.get('https://www.tiktok.com')
+            time.sleep(5)
+            try:
+                login_button = self.driver.find_element(By. XPATH, "//button[text()='Log in']")
+                if login_button and login_button.is_displayed():
+                    print(f"❌ NOT logged in")
+                    return False
+            except NoSuchElementException:
+                print(f"✅ Logged in!")
+                return True
+            return False
+        except Exception as e: 
+            print(f"⚠️ Login check error: {e}")
+            return False
+    
+    def wait_for_captcha(self):
+        try:
+            captcha_selectors = ['iframe[src*="captcha"]', '[id*="captcha"]', '[class*="captcha"]']
+            for selector in captcha_selectors:
+                try: 
+                    captcha = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    if captcha and captcha.is_displayed():
+                        print(f"\n🔐 CAPTCHA!  Solve manually (3 min)...")
+                        for i in range(36):
+                            time.sleep(5)
+                            try:
+                                captcha = self.driver.find_element(By.CSS_SELECTOR, selector)
+                                if not captcha.is_displayed():
+                                    print(f"✅ Captcha solved!")
+                                    return True
+                            except NoSuchElementException: 
+                                print(f"✅ Captcha solved!")
+                                return True
+                            if i % 6 == 0 and i > 0:
+                                print(f"⏰ Waiting...  ({(i*5)//60}min)")
+                        return False
+                except NoSuchElementException:
+                    continue
+            return True
+        except Exception as e:
+            return True
+    
+    def login_to_tiktok(self, account):
+        if self.check_if_logged_in():
+            print(f"🎉 Already logged in!")
+            return True
+        
+        print(f"🔑 Logging in as {account['username']}...")
+        try:
+            self.driver.get('https://www.tiktok.com/login/phone-or-email/email')
+            time.sleep(random.uniform(3, 5))
+            
+            username_input = WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.NAME, "username"))
+            )
+            
+            username_input.clear()
+            for char in account['username']:
+                username_input.send_keys(char)
+                time.sleep(random.uniform(0.05, 0.15))
+            time.sleep(random.uniform(1, 2))
+            
+            password_input = self.driver.find_element(By.CSS_SELECTOR, 'input[type="password"]')
+            password_input.clear()
+            for char in account['password']:
+                password_input.send_keys(char)
+                time.sleep(random.uniform(0.05, 0.15))
+            time.sleep(random. uniform(1, 2))
+            
+            login_button = self.driver.find_element(By.CSS_SELECTOR, 'button[type="submit"]')
+            login_button.click()
+            time.sleep(random.uniform(5, 8))
+            
+            if not self.wait_for_captcha():
+                return False
+            
+            time.sleep(3)
+            
+            # Check for 2FA
+            twofa_selectors = ['input[placeholder*="code"]', 'input[placeholder*="Code"]', 'input[type="text"][maxlength="6"]']
+            twofa_input = None
+            for selector in twofa_selectors:
+                try: 
+                    twofa_input = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    if twofa_input and twofa_input.is_displayed():
+                        break
+                except NoSuchElementException:
+                    continue
+            
+            if twofa_input and twofa_input.is_displayed():
+                print(f"🔐 2FA required...")
+                twofa_code = generate_2fa_code(account['twofa_secret'])
+                if twofa_code:
+                    print(f"✅ Generated:  {twofa_code}")
+                    twofa_input.clear()
+                    for char in twofa_code: 
+                        twofa_input.send_keys(char)
+                        time.sleep(random. uniform(0.1, 0.2))
+                    time.sleep(1)
+                    try:
+                        submit_buttons = self.driver.find_elements(By.CSS_SELECTOR, 'button[type="submit"]')
+                        for btn in submit_buttons:
+                            if btn.is_displayed():
+                                btn.click()
+                                break
+                    except: 
+                        twofa_input.send_keys(Keys.RETURN)
+                    time.sleep(8)
+            
+            if self.check_if_logged_in():
+                print(f"✅ Login successful!  💾 Session saved!")
+                return True
+            else: 
+                print(f"❌ Login failed")
+                return False
+        except Exception as e:
+            print(f"❌ Login error: {e}")
+            return False
+    
+    def click_comments_tab(self):
+        print(f"👆 Clicking Comments...")
+        try:
+            time.sleep(3)
+            buttons = self.driver.find_elements(By.TAG_NAME, 'button')
+            for button in buttons:
+                try:
+                    if 'comment' in button.text.lower():
+                        button.click()
+                        time.sleep(2)
+                        print(f"✅ Clicked!")
+                        return True
+                except: 
+                    continue
+            print(f"⚠️ Not found")
+            return True
+        except: 
+            return True
+    
+    def scroll_and_get_all_comments(self, video_url, max_comments):
+        """FIXED: Scrolls comments container and uses simpler extraction"""
+        print(f"📱 Opening:  {video_url}")
+        
+        try:
+            self.driver.get(video_url)
+            time.sleep(random.uniform(5, 7))
+            
+            self.click_comments_tab()
+            time.sleep(2)
+            
+            all_comments = []
+            book_comment = None
+            scrolls = 0
+            max_scrolls = 10
+            
+            print(f"📜 Searching for:  '{BOOK_KEYWORD}'")
+            
+            while scrolls < max_scrolls: 
+                # Check if keyword on page
+                page_text = self.driver.find_element(By.TAG_NAME, 'body').text
+                if BOOK_KEYWORD in page_text: 
+                    print(f"✅ Book keyword found on page!")
+                
+                # Get comment elements using the most reliable selector
+                comment_elements = self. driver.find_elements(By. CSS_SELECTOR, '[data-e2e="comment-level-1"]')
+                
+                print(f"  Found {len(comment_elements)} comment elements...")
+                
+                for idx, elem in enumerate(comment_elements):
+                    try:
+                        # Get ALL text from this element
+                        full_text = elem.text
+                        
+                        if not full_text or len(full_text) < 10:
+                            continue
+                        
+                        print(f"    Comment {idx+1} text preview: {full_text[:80]}...")
+                        
+                        # Extract username - SIMPLEST METHOD:  just get first link's href
+                        username = None
+                        all_links = elem.find_elements(By.TAG_NAME, 'a')
+                        
+                        for link in all_links:
+                            try:
+                                href = link.get_attribute('href')
+                                print(f"      Found link href: {href}")
+                                if href and '/@' in href:
+                                    username = href.split('/@')[-1]. split('?')[0].split('/')[0]
+                                    print(f"      ✅ Extracted username: @{username}")
+                                    break
+                            except:
+                                continue
+                        
+                        if not username:
+                            print(f"      ❌ No username found, skipping")
+                            continue
+                        
+                        # Extract likes
+                        likes = 0
+                        all_spans = elem.find_elements(By.TAG_NAME, 'span')
+                        for span in all_spans:
+                            try: 
+                                span_text = span.text
+                                if span_text and (span_text.isdigit() or 'K' in span_text or 'M' in span_text):
+                                    likes = self.parse_like_count(span_text)
+                                    if likes > 0:
+                                        print(f"      ✅ Found likes: {likes}")
+                                        break
+                            except:
+                                continue
+                        
+                        # Check for book keyword
+                        is_book_comment = BOOK_KEYWORD in full_text
+                        
+                        comment_data = {
+                            'text': full_text[: 500],
+                            'username': username,
+                            'likes': likes,
+                            'element':  elem,
+                            'is_book_comment': is_book_comment
+                        }
+                        
+                        # Avoid duplicates
+                        if not any(c['username'] == username for c in all_comments):
+                            all_comments.append(comment_data)
+                            print(f"      ✅ Added comment by @{username} (Book: {is_book_comment})")
+                            
+                            if is_book_comment and not book_comment:
+                                book_comment = comment_data
+                                print(f"\n🎉 FOUND BOOK COMMENT!")
+                                print(f"   @{username}:  {full_text[:80]}...")
+                                print(f"   Likes: {likes}\n")
+                    
+                    except Exception as e: 
+                        print(f"      ❌ Error processing comment: {e}")
+                        continue
+                
+                # SCROLL THE COMMENTS CONTAINER (not the window!)
+                try:
+                    # Find the scrollable comments container
+                    comments_container = self.driver.find_element(By.CSS_SELECTOR, '[data-e2e="browse-comments"]')
+                    # Scroll it using JavaScript
+                    self.driver.execute_script("arguments[0].scrollTop = arguments[0].scrollTop + 500", comments_container)
+                    print(f"  📜 Scrolled comments container")
+                except:
+                    # Fallback:  scroll the window
+                    self.driver. execute_script('window.scrollBy(0, 500)')
+                    print(f"  📜 Scrolled window (fallback)")
+                
+                time.sleep(random.uniform(SCROLL_DELAY_MIN, SCROLL_DELAY_MAX))
+                scrolls += 1
+                
+                print(f"  Scrolled {scrolls}/{max_scrolls} - Total:  {len(all_comments)} comments")
+                
+                if book_comment and len(all_comments) >= 20:
+                    break
+            
+            print(f"\n✅ Extracted {len(all_comments)} comments total")
+            
+            if not book_comment and all_comments:
+                print(f"\n⚠️ Book comment not found.  Sample:")
+                for i, comment in enumerate(all_comments[:3], 1):
+                    print(f"   {i}. @{comment['username']}: {comment['text'][:60]}...")
+            
+            return all_comments, book_comment
+            
+        except Exception as e:
+            print(f"❌ Error:  {e}")
+            import traceback
+            traceback.print_exc()
+            return [], None
+    
+    def parse_like_count(self, likes_text):
+        try:
+            likes_text = likes_text.strip().upper()
+            if 'K' in likes_text: 
+                return int(float(likes_text.replace('K', '')) * 1000)
+            elif 'M' in likes_text:
+                return int(float(likes_text.replace('M', '')) * 1000000)
+            else:
+                return int(likes_text)
+        except:
+            return 0
+    
+    def calculate_likes_random_between_top2(self, all_comments, book_comment):
+        sorted_comments = sorted(all_comments, key=lambda x: x['likes'], reverse=True)
+        top_2 = sorted_comments[:2]
+        
+        if len(top_2) == 0:
+            return min(100, MAX_LIKES_FOR_TESTING)
+        
+        if len(top_2) == 1:
+            top_likes = top_2[0]['likes']
+            current_likes = book_comment['likes']
+            if top_likes <= current_likes:
+                likes_needed = current_likes + random.randint(50, 100)
+            else:
+                likes_needed = random.randint(current_likes + 50, top_likes + 50)
+        else:
+            first_place = top_2[0]['likes']
+            second_place = top_2[1]['likes']
+            likes_needed = random.randint(second_place, first_place)
+        
+        likes_needed = min(likes_needed, MAX_LIKES_FOR_TESTING)
+        
+        print(f"\n📊 TOP 2:")
+        for i, comment in enumerate(top_2, 1):
+            print(f"   #{i}: {comment['likes']} - @{comment['username']}")
+        print(f"   Book: {book_comment['likes']}")
+        print(f"🎲 Random: {likes_needed}")
+        print(f"⚠️ TEST:  Max {MAX_LIKES_FOR_TESTING}")
+        
+        return likes_needed
+    
+    def reply_to_comment(self, comment_element):
+        print(f"💬 Replying...")
+        try:
+            buttons = comment_element.find_elements(By.TAG_NAME, 'button')
+            for btn in buttons:
+                try: 
+                    if 'reply' in btn.text.lower():
+                        btn.click()
+                        time.sleep(random.uniform(1, 2))
+                        break
+                except:
+                    continue
+            
+            reply_text = random.choice(REPLY_TEMPLATES)
+            
+            inputs = self.driver.find_elements(By.TAG_NAME, 'textarea')
+            if not inputs:
+                inputs = self.driver.find_elements(By.TAG_NAME, 'input')
+            
+            for inp in inputs:
+                try: 
+                    if inp.is_displayed():
+                        for char in reply_text:
+                            inp.send_keys(char)
+                            time.sleep(random.uniform(0.05, 0.15))
+                        time.sleep(random.uniform(0.5, 1.5))
+                        
+                        buttons = self.driver.find_elements(By.TAG_NAME, 'button')
+                        for btn in buttons:
+                            try:
+                                if 'post' in btn.text.lower():
+                                    btn.click()
+                                    time.sleep(random.uniform(2, 4))
+                                    print(f"✅ Posted:  {reply_text[: 50]}...")
+                                    return True
+                            except:
+                                continue
+                        break
+                except:
+                    continue
+            return False
+        except Exception as e: 
+            print(f"❌ Error: {e}")
+            return False
+    
+    def close_browser(self):
+        if self.driver:
+            self. driver.quit()
+            if os.path.exists('proxy_auth_plugin.zip'):
+                try:
+                    os.remove('proxy_auth_plugin.zip')
+                except:
+                    pass
+
+class DiscordBot:
+    def __init__(self):
+        intents = discord.Intents. default()
+        intents.message_content = True
+        intents.messages = True
+        
+        self.client = discord.Client(intents=intents)
+        self.account_manager = AccountManager(TIKTOK_ACCOUNTS)
+        self.pending_videos = {}
+        self.processing_queue = []
+        self.is_processing = False
+        
+        self.client.event(self.on_ready)
+        self.client.event(self.on_message)
+    
+    async def on_ready(self):
+        print(f"\n✅ Bot ready:  {self.client.user}")
+        print(f"📺 Channel: {DISCORD_CHANNEL_ID}")
+        print(f"📚 Keyword: '{BOOK_KEYWORD}'")
+        print(f"⏰ Wait:  {WAIT_TIME_BEFORE_PROCESSING}s")
+        print(f"⚠️ TEST: Max {MAX_LIKES_FOR_TESTING} likes\n")
+        
+        for account in TIKTOK_ACCOUNTS: 
+            account['status'] = 'active'
+            account['replies_today'] = 0
+    
+    async def on_message(self, message):
+        if message.author.bot or message.channel.id != DISCORD_CHANNEL_ID:
+            return
+        
+        tiktok_url = self.extract_tiktok_url(message.content)
+        if not tiktok_url:
+            return
+        
+        print(f"\n🎬 TikTok:  {tiktok_url}")
+        await message.add_reaction("⏰")
+        
+        process_time = datetime.now() + timedelta(seconds=WAIT_TIME_BEFORE_PROCESSING)
+        video_data = {
+            'url': tiktok_url,
+            'message': message,
+            'process_time': process_time,
+            'message_id': message.id
+        }
+        
+        self.pending_videos[message.id] = video_data
+        self.processing_queue.append(video_data)
+        self.processing_queue. sort(key=lambda x: x['process_time'])
+        
+        if not self.is_processing:
+            asyncio.create_task(self. process_queue())
+    
+    async def process_queue(self):
+        self.is_processing = True
+        while self.processing_queue:
+            video_data = self.processing_queue[0]
+            wait_seconds = (video_data['process_time'] - datetime.now()).total_seconds()
+            if wait_seconds > 0:
+                await asyncio.sleep(wait_seconds)
+            await self.process_tiktok_video(video_data)
+            self.processing_queue.pop(0)
+            if self.processing_queue:
+                await asyncio.sleep(5)
+        self.is_processing = False
+    
+    async def process_tiktok_video(self, video_data):
+        message = video_data['message']
+        video_url = video_data['url']
+        
+        await message.add_reaction("🔍")
+        status_msg = await message.reply("⏳ **Processing.. .**")
+        
+        account = self.account_manager.get_available_account()
+        if not account:
+            await message.add_reaction("❌")
+            await status_msg.edit(content="❌ **No accounts**")
+            return
+        
+        print(f"\n{'='*60}")
+        print(f"🎬 PROCESSING")
+        print(f"Account: {account['username']}")
+        print(f"Video: {video_url}")
+        print(f"{'='*60}")
+        
+        scraper = TikTokScraper(self.account_manager)
+        
+        try:
+            loop = asyncio.get_event_loop()
+            
+            await status_msg.edit(content=f"⏳ **Starting browser.. .**")
+            if not await loop.run_in_executor(None, scraper.start_browser, account):
+                await message.add_reaction("❌")
+                await status_msg.edit(content="❌ **Browser failed**")
+                return
+            
+            await status_msg.edit(content=f"⏳ **Logging in...**")
+            if not await loop.run_in_executor(None, scraper.login_to_tiktok, account):
+                self.account_manager.mark_account_banned(account)
+                await message. add_reaction("❌")
+                await status_msg.edit(content=f"❌ **Login failed**")
+                scraper.close_browser()
+                return
+            
+            await status_msg.edit(content=f"⏳ **Finding book comment...**")
+            all_comments, book_comment = await loop.run_in_executor(None, scraper.scroll_and_get_all_comments, video_url, MAX_COMMENTS_TO_SCROLL)
+            
+            if not book_comment:
+                await message. add_reaction("❌")
+                await status_msg.edit(content=f"❌ **No book comment**\nSearched {len(all_comments)} comments")
+                scraper.close_browser()
+                return
+            
+            await status_msg.edit(content=f"⏳ **Calculating.. .**")
+            likes_needed = scraper.calculate_likes_random_between_top2(all_comments, book_comment)
+            
+            await status_msg.edit(content=f"⏳ **Replying...**")
+            reply_success = await loop.run_in_executor(None, scraper.reply_to_comment, book_comment['element'])
+            
+            username = book_comment['username']
+            reply_content = f"{video_url} {username} {likes_needed}"
+            await message.reply(reply_content)
+            
+            print(f"✅ Reply:  {reply_content}")
+            
+            self.account_manager.mark_account_used(account)
+            await message.add_reaction("✅")
+            await status_msg. edit(content=f"✅ **SUCCESS! **\n• @{username}\n• {likes_needed} likes\n• Reply: {'✅' if reply_success else '⚠️'}")
+            
+            print(f"\n✅ COMPLETE:  @{username} → {likes_needed} likes\n")
+            
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            import traceback
+            traceback.print_exc()
+            await message.add_reaction("❌")
+            await status_msg.edit(content=f"❌ **Error**")
+        finally:
+            scraper.close_browser()
+    
+    def extract_tiktok_url(self, text):
+        pattern = r'https?://(?:www\.|vm\. )?tiktok\.com/[@\w\-./]+'
+        match = re.search(pattern, text)
+        return match.group(0) if match else None
+    
+    def run(self):
+        self.client.run(DISCORD_BOT_TOKEN)
+
+if __name__ == "__main__": 
+    print(f"""
+╔══════════════════════════════════════════════════════════════╗
+║         TIKTOK BOT - FINAL WORKING VERSION                   ║
+╚══════════════════════════════════════════════════════════════╝
+
+✅ FIXED:  Scrolls COMMENTS container (not window)
+✅ FIXED: Debug output shows username extraction
+✅ FIXED:  Simpler, more reliable extraction
+✅ Wait:  {WAIT_TIME_BEFORE_PROCESSING}s | Max:  {MAX_LIKES_FOR_TESTING} likes
+
+🚀 Starting... 
+""")
+    bot = DiscordBot()
+    bot.run()
